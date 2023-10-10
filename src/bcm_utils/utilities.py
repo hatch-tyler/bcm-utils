@@ -10,7 +10,9 @@ from pathlib import Path
 from shapely.geometry import Polygon
 
 
-def create_bounding_polygon(area_of_interest, crs=None):
+def create_bounding_polygon(
+    area_of_interest: str, crs: str | None = None
+) -> gpd.GeoDataFrame:
     """
     Create a bounding polygon for an area of interest
 
@@ -118,11 +120,62 @@ def clip_raster(
             dest.write(out_image)
 
 
+def convert_raster_to_shp(raster: str, out_shp: str) -> None:
+    """
+    Convert raster to shapefile format
+
+    Parameters
+    ----------
+    raster : str
+        path and name of raster of format readable by rasterio
+
+    out_shp : str
+        path and name of output shapefile containing grid and values
+
+    Returns
+    -------
+    None
+        shapefile is written to disk
+    """
+    with rasterio.open(raster) as dataset:
+        nrows, ncols = dataset.shape
+        data = dataset.read(1)
+        d = {"value": [], "geometry": []}
+        for r in range(nrows):
+            for c in range(ncols):
+                # get pixel value
+                pixel_value = data[r, c]
+
+                if pixel_value != -9999:
+                    # add raster value to dataset dictionary
+                    d["value"].append(pixel_value)
+
+                    # get the corner coordinates of the grid cell
+                    coords = []
+                    for l in ["ul", "ll", "lr", "ur"]:
+                        coords.append(dataset.xy(r, c, offset=l))
+
+                    # convert to shapely Polygon
+                    polygon_geom = Polygon(coords)
+
+                    # add Polygon to dataset dictionary
+                    d["geometry"].append(polygon_geom)
+
+    # convert dictionary to dataframe
+    gdf = gpd.GeoDataFrame(d, crs=dataset.crs)
+
+    # write shapefile
+    gdf.to_file(out_shp)
+
+
 if __name__ == "__main__":
     raster = r"D:\INTERA\BCM\rch\rch1899dec.asc"
     bcm_crs = "EPSG:3310"
     bp = r"D:\INTERA\Projects\Borrego\GIS\bounding_polygon.shp"
     out_ext = "tif"
     out_path = r"D:\INTERA\Projects\Borrego\BCM\test"
+    in_ras = r"D:\INTERA\Projects\Borrego\BCM\test\rch1899dec.asc"
+    out_shp = r"D:\INTERA\Projects\Borrego\BCM\test\rch1899dec.shp"
 
-    clip_raster(raster, bcm_crs, bp, out_path)
+    # clip_raster(raster, bcm_crs, bp, out_path)
+    convert_raster_to_shp(in_ras, out_shp)
